@@ -16,6 +16,17 @@ AppName=EFB Web Browser for MSFS 2024
 AppVersion={#AppVersion}
 AppVerName=EFB Web Browser {#AppVersion}
 AppPublisher=ButterSim
+AppPublisherURL=https://butr.cc
+AppSupportURL=https://github.com/emergencybutter/butter-efb-browser/issues
+AppUpdatesURL=https://github.com/emergencybutter/butter-efb-browser/releases
+AppCopyright=MIT License
+; Version info and icon on Setup.exe itself (an installer without them looks suspicious to AV heuristics).
+VersionInfoVersion={#AppVersion}
+VersionInfoCompany=ButterSim
+VersionInfoDescription=EFB Web Browser for MSFS 2024 Setup
+VersionInfoProductName=EFB Web Browser for MSFS 2024
+VersionInfoProductVersion={#AppVersion}
+SetupIconFile=..\companion\assets\app.ico
 ; Must match install::install_dir() so that --install finds itself already in place.
 DefaultDirName={localappdata}\Programs\EFB Browser Companion
 DisableDirPage=yes

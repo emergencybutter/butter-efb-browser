@@ -43,4 +43,27 @@ fn main() {
     }
     code.push_str("];\n");
     fs::write(PathBuf::from(env::var("OUT_DIR").unwrap()).join("efb_package.rs"), code).unwrap();
+
+    windows_resources();
+}
+
+/// Version info, icon and manifest: an exe without them looks suspicious to antivirus heuristics.
+/// FileVersion/ProductVersion come from Cargo.toml.
+fn windows_resources() {
+    println!("cargo:rerun-if-changed=assets/app.ico");
+    println!("cargo:rerun-if-changed=assets/app.manifest");
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
+        return;
+    }
+    let mut res = winresource::WindowsResource::new();
+    res.set_icon("assets/app.ico")
+        .set_manifest_file("assets/app.manifest")
+        .set("CompanyName", "ButterSim")
+        .set("ProductName", "EFB Web Browser for MSFS 2024")
+        .set("FileDescription", "EFB Browser Companion")
+        .set("InternalName", "efb-browser-companion")
+        .set("OriginalFilename", "efb-browser-companion.exe")
+        .set("LegalCopyright", "MIT License, github.com/emergencybutter/butter-efb-browser")
+        .set("Comments", "Streams web pages to the Browser app on the MSFS 2024 EFB tablet.");
+    res.compile().expect("compiling Windows resources (needs rc.exe from the Windows SDK)");
 }
