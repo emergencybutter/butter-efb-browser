@@ -1,8 +1,10 @@
 node_modules/
 companion/profile/
+companion/target/
 efb/_PackageInt/
 efb/Packages/
 efb/PackagesMetadata/
 efb/PackageSources/BrowserApp/dist/
 efb/PackageSources/BrowserApp/dev/dist/
 *.log
+dist/
