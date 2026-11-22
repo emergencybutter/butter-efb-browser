@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>EFB Browser - dev harness</title>
+  <link rel="stylesheet" href="dist/harness.css">
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; font-family: sans-serif; }
+    /* Roughly the EFB tablet app area */
+    .efb-view.BrowserApp { width: 820px; height: 1100px; margin: 0 auto; }
+    #root { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div class="efb-view BrowserApp"><div id="root"></div></div>
+  <script>
+    // Minimal stubs of the sim globals the SDK touches at load time.
+    var noop = function () {};
+    window.SimVar = { GetSimVarValue: function () { return 0; }, SetSimVarValue: function () { return Promise.resolve(); }, GetGameVarValue: function () { return 0; } };
+    window.Coherent = { trigger: function () { console.log("[Coherent.trigger]", [].slice.call(arguments).join(" ")); }, on: function () { return { clear: noop }; }, off: noop, call: function () { return Promise.resolve(); } };
+    window.RegisterViewListener = function () { return { on: noop, off: noop, call: function () { return Promise.resolve(); }, unregister: noop }; };
+    window.GetStoredData = function () { return ""; };
+    window.SetStoredData = noop;
+    var enumStub = function () { return new Proxy({}, { get: function () { return 0; } }); };
+    window.RunwayDesignator = enumStub();
+    window.Avionics = new Proxy({}, { get: function () { return function () {}; } });
+    window.BaseInstrument = function BaseInstrument() {};
+    window.ViewListener = { ViewListener: function ViewListener() {} };
+  </script>
+  <script src="../node_modules/@microsoft/msfs-sdk/msfssdk-iife.js"></script>
+  <script src="dist/harness.js"></script>
+</body>
+</html>

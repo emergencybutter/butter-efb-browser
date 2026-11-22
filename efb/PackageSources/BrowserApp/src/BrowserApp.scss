@@ -1,0 +1,10 @@
+.browser-app {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  // Leave room for the EFB status bar at the top.
+  padding-top: calc(40px * var(--panel-height) / var(--base-height, 716));
+  box-sizing: border-box;
+  background-color: #15181e;
+}

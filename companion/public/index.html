@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>EFB Browser - test viewer</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #1b1e24; color: #ddd; font: 14px system-ui, sans-serif; }
+  #wrap { display: flex; flex-direction: column; height: 100%; max-width: 900px; margin: 0 auto; }
+  #bar { display: flex; gap: 6px; padding: 6px; background: #262a33; }
+  #bar button { background: #353a46; color: #eee; border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+  #bar button:disabled { opacity: .35; }
+  #url { flex: 1; background: #12141a; color: #fff; border: 1px solid #444; border-radius: 6px; padding: 6px 10px; }
+  #view { position: relative; flex: 1; overflow: hidden; background: #fff; outline: none; }
+  #view img { position: absolute; inset: 0; width: 100%; height: 100%; user-select: none; -webkit-user-drag: none; }
+  #status { padding: 4px 8px; font-size: 12px; color: #999; background: #262a33; }
+  #overlay { position: absolute; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; }
+  #overlay .box { background: #2b2f3a; padding: 12px; border-radius: 8px; max-height: 80%; overflow: auto; min-width: 50%; }
+  #overlay .opt { padding: 8px; cursor: pointer; border-radius: 4px; }
+  #overlay .opt:hover { background: #3c4252; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="bar">
+    <button id="back">&#9664;</button>
+    <button id="fwd">&#9654;</button>
+    <button id="reload">&#10227;</button>
+    <button id="home">&#8962;</button>
+    <input id="url" placeholder="Search or enter address">
+    <button id="mobile">Mobile</button>
+    <button id="zoomOut">-</button>
+    <button id="zoomIn">+</button>
+    <button id="closeTab" style="display:none">&#10005; tab</button>
+  </div>
+  <div id="view" tabindex="0">
+    <img id="img0"><img id="img1">
+    <div id="overlay"><div class="box" id="box"></div></div>
+  </div>
+  <div id="status">Connecting...</div>
+</div>
+<script>
+// Reference client implementing the same protocol as the EFB app.
+const $ = (id) => document.getElementById(id);
+const view = $('view'), imgs = [$('img0'), $('img1')];
+let ws, front = 0, state = {}, zoom = 1, mobile = false, dragStart = null, dragging = false;
+let remoteEditable = false;
+
+function connect() {
+  ws = new WebSocket(`ws://${location.host}`);
+  ws.onopen = () => { $('status').textContent = 'Connected'; sendConfig(); };
+  ws.onclose = () => { $('status').textContent = 'Disconnected - retrying...'; setTimeout(connect, 2000); };
+  ws.onmessage = (ev) => onMessage(JSON.parse(ev.data));
+}
+const send = (m) => ws && ws.readyState === 1 && ws.send(JSON.stringify(m));
+
+function sendConfig() {
+  const r = view.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  send({ type: 'config', width: Math.round(r.width * dpr), height: Math.round(r.height * dpr), zoom: zoom * dpr, mobile, quality: 75, transport: 'data' });
+}
+
+function onMessage(m) {
+  switch (m.type) {
+    case 'frame': {
+      const back = imgs[1 - front];
+      back.onload = () => { back.style.visibility = 'visible'; imgs[front].style.visibility = 'hidden'; front = 1 - front; send({ type: 'ack', id: m.id }); };
+      back.onerror = () => send({ type: 'ack', id: m.id });
+      back.src = m.data ? 'data:image/jpeg;base64,' + m.data : `/frame/${m.id}.jpg`;
+      break;
+    }
+    case 'state':
+      state = m;
+      if (document.activeElement !== $('url')) $('url').value = m.url;
+      $('back').disabled = !m.canGoBack; $('fwd').disabled = !m.canGoForward;
+      $('reload').innerHTML = m.loading ? '&#10005;' : '&#10227;';
+      $('closeTab').style.display = m.tabs > 1 ? '' : 'none';
+      $('mobile').textContent = m.mobile ? 'Desktop' : 'Mobile';
+      $('status').textContent = (m.loading ? 'Loading... ' : '') + (m.title || '') + (m.tabs > 1 ? `  [tab ${m.tabIndex + 1}/${m.tabs}]` : '');
+      document.title = m.title || 'EFB Browser';
+      break;
+    case 'focus': remoteEditable = m.editable; if (m.editable) view.focus(); break;
+    case 'select': showSelect(m); break;
+    case 'dialog': if (m.dialog) showDialog(m.dialog); break;
+    case 'notice': $('status').textContent = m.message; break;
+  }
+}
+
+function showSelect(m) {
+  const box = $('box'); box.innerHTML = '';
+  m.options.forEach((o, i) => {
+    const d = document.createElement('div'); d.className = 'opt'; d.textContent = (i === m.selectedIndex ? '✓ ' : '') + o.label;
+    if (!o.disabled) d.onclick = () => { send({ type: 'select', index: i }); $('overlay').style.display = 'none'; };
+    box.appendChild(d);
+  });
+  $('overlay').style.display = 'flex';
+  $('overlay').onclick = (e) => { if (e.target.id === 'overlay') { send({ type: 'select', index: -1 }); $('overlay').style.display = 'none'; } };
+}
+
+function showDialog(d) {
+  if (d.kind === 'prompt') { const v = prompt(d.message, d.defaultValue); send({ type: 'dialog', accept: v !== null, text: v ?? undefined }); }
+  else if (d.kind === 'confirm') send({ type: 'dialog', accept: confirm(d.message) });
+  else { alert(d.message); send({ type: 'dialog', accept: true }); }
+}
+
+const norm = (e) => { const r = view.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }; };
+const BTN = ['left', 'middle', 'right'];
+view.addEventListener('contextmenu', (e) => e.preventDefault());
+view.addEventListener('mousedown', (e) => {
+  if (e.target.closest('#overlay')) return;
+  e.preventDefault(); view.focus();
+  send({ type: 'mouse', action: 'down', ...norm(e), button: BTN[e.button], clickCount: e.detail || 1 });
+});
+window.addEventListener('mousemove', (e) => { if (e.target.closest && e.target.closest('#view')) send({ type: 'mouse', action: 'move', ...norm(e) }); });
+window.addEventListener('mouseup', (e) => { if (e.target.closest && e.target.closest('#view')) send({ type: 'mouse', action: 'up', ...norm(e), button: BTN[e.button], clickCount: e.detail || 1 }); });
+view.addEventListener('wheel', (e) => { e.preventDefault(); send({ type: 'wheel', ...norm(e), dx: e.deltaX, dy: e.deltaY }); }, { passive: false });
+
+const SPECIAL = new Set(['Enter', 'Backspace', 'Tab', 'Escape', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown', 'Insert', 'F5']);
+view.addEventListener('keydown', (e) => {
+  const mods = { ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey, meta: e.metaKey };
+  if (SPECIAL.has(e.key) || ((e.ctrlKey || e.metaKey) && e.key.length === 1)) { e.preventDefault(); send({ type: 'key', key: e.key, modifiers: mods }); }
+  else if (e.key.length === 1) { e.preventDefault(); send({ type: 'text', text: e.key }); }
+});
+view.addEventListener('paste', (e) => { const t = e.clipboardData.getData('text'); if (t) send({ type: 'text', text: t }); });
+
+$('url').addEventListener('keydown', (e) => { if (e.key === 'Enter') { send({ type: 'navigate', url: $('url').value }); view.focus(); } });
+$('url').addEventListener('focus', () => $('url').select());
+$('back').onclick = () => send({ type: 'back' });
+$('fwd').onclick = () => send({ type: 'forward' });
+$('reload').onclick = () => send({ type: state.loading ? 'stop' : 'reload' });
+$('home').onclick = () => send({ type: 'home' });
+$('closeTab').onclick = () => send({ type: 'closeTab' });
+$('mobile').onclick = () => { mobile = !mobile; sendConfig(); };
+$('zoomIn').onclick = () => { zoom = Math.min(3, zoom + 0.25); sendConfig(); };
+$('zoomOut').onclick = () => { zoom = Math.max(0.5, zoom - 0.25); sendConfig(); };
+let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(sendConfig, 200); });
+document.addEventListener('visibilitychange', () => send({ type: document.hidden ? 'pause' : 'resume' }));
+connect();
+</script>
+</body>
+</html>

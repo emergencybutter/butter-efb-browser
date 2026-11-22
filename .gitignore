@@ -1,0 +1,8 @@
+node_modules/
+companion/profile/
+efb/_PackageInt/
+efb/Packages/
+efb/PackagesMetadata/
+efb/PackageSources/BrowserApp/dist/
+efb/PackageSources/BrowserApp/dev/dist/
+*.log

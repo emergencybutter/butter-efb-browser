@@ -1,0 +1,420 @@
+// Coherent GT supports a subset of CSS: stick to flexbox, no `gap`, no grid.
+
+$bg: #15181e;
+$bar: #232731;
+$btn: #323846;
+$btn-hover: #3e4556;
+$accent: #1f6feb;
+$text: #e8eaf0;
+$muted: #9aa3b5;
+
+.ui-view.page {
+  height: 100%;
+}
+
+.browser-page {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  color: $text;
+  font-size: 18px;
+  background-color: $bg;
+
+  .hidden {
+    display: none !important;
+  }
+
+  // ---------------------------------------------------------------- toolbar
+  .toolbar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    height: 52px;
+    padding: 0 6px;
+    background-color: $bar;
+  }
+
+  .tb-btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 44px;
+    height: 40px;
+    margin: 0 2px;
+    border-radius: 8px;
+
+    img {
+      width: 26px;
+      height: 26px;
+    }
+
+    &:hover {
+      background-color: $btn-hover;
+    }
+
+    &.disabled {
+      opacity: 0.3;
+    }
+
+    &.active {
+      background-color: $accent;
+    }
+  }
+
+  .tab-count {
+    position: absolute;
+    right: 2px;
+    top: 0;
+    min-width: 16px;
+    padding: 0 3px;
+    font-size: 12px;
+    line-height: 16px;
+    text-align: center;
+    border-radius: 8px;
+    background-color: $accent;
+  }
+
+  .url-box {
+    position: relative;
+    flex: 1;
+    margin: 0 6px;
+  }
+
+  .go-btn {
+    position: absolute;
+    right: 4px;
+    top: 4px;
+    height: 30px;
+    padding: 0 14px;
+    font-size: 15px;
+    line-height: 30px;
+    border-radius: 15px;
+    background-color: $accent;
+  }
+
+  .url-input {
+    width: 100%;
+    height: 38px;
+    padding: 0 14px;
+    box-sizing: border-box;
+    font-size: 17px;
+    color: $text;
+    border: 1px solid #3a4150;
+    border-radius: 19px;
+    background-color: #0f1115;
+    outline: none;
+
+    &:focus {
+      border-color: $accent;
+    }
+  }
+
+  // ---------------------------------------------------------------- viewport
+  .viewport {
+    position: relative;
+    flex: 1;
+    overflow: hidden;
+    background-color: #ffffff;
+  }
+
+  .frame {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    visibility: hidden;
+
+    &.visible {
+      visibility: visible;
+    }
+  }
+
+  .loading-bar {
+    position: absolute;
+    z-index: 5;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 4px;
+    overflow: hidden;
+    background-color: rgba(31, 111, 235, 0.25);
+  }
+
+  .loading-bar-fill {
+    position: absolute;
+    top: 0;
+    width: 30%;
+    height: 100%;
+    background-color: $accent;
+    animation: browser-loading 1.2s linear infinite;
+  }
+
+  .notice {
+    position: absolute;
+    z-index: 5;
+    left: 5%;
+    bottom: 16px;
+    width: 90%;
+    padding: 10px 14px;
+    box-sizing: border-box;
+    font-size: 15px;
+    border-radius: 8px;
+    background-color: rgba(20, 22, 28, 0.92);
+  }
+
+  // ---------------------------------------------------------------- overlays & panels
+  .overlay {
+    position: absolute;
+    z-index: 10;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(0, 0, 0, 0.55);
+
+    &.offline {
+      background-color: $bg;
+    }
+  }
+
+  .panel {
+    width: 82%;
+    max-height: 85%;
+    padding: 20px;
+    box-sizing: border-box;
+    border-radius: 14px;
+    background-color: $bar;
+  }
+
+  .panel-title {
+    margin-bottom: 14px;
+    font-size: 22px;
+    font-weight: bold;
+  }
+
+  .panel-text {
+    margin-bottom: 10px;
+    color: $muted;
+    line-height: 1.4;
+
+    b {
+      color: $text;
+    }
+  }
+
+  .dialog-message {
+    color: $text;
+  }
+
+  .mono {
+    color: $text;
+    font-family: monospace;
+  }
+
+  .panel-buttons {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    margin-top: 18px;
+  }
+
+  .btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 90px;
+    height: 40px;
+    margin-left: 10px;
+    padding: 0 16px;
+    box-sizing: border-box;
+    border-radius: 8px;
+    background-color: $btn;
+
+    &:hover {
+      background-color: $btn-hover;
+    }
+
+    &.primary {
+      background-color: $accent;
+    }
+
+    &.small {
+      min-width: 44px;
+      height: 36px;
+      margin-left: 6px;
+      padding: 0 10px;
+    }
+  }
+
+  .text-field {
+    width: 100%;
+    height: 38px;
+    padding: 0 10px;
+    box-sizing: border-box;
+    font-size: 17px;
+    color: $text;
+    border: 1px solid #3a4150;
+    border-radius: 8px;
+    background-color: #0f1115;
+    outline: none;
+
+    &:focus {
+      border-color: $accent;
+    }
+  }
+
+  // <select> picker
+  .list-panel {
+    padding: 8px;
+    overflow-y: auto;
+  }
+
+  .option {
+    padding: 12px 14px;
+    border-radius: 6px;
+
+    &:hover {
+      background-color: $btn-hover;
+    }
+
+    &.selected {
+      background-color: $accent;
+    }
+
+    &.disabled {
+      opacity: 0.4;
+    }
+  }
+
+  // settings
+  .settings-panel {
+    width: 90%;
+  }
+
+  .setting-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 50px;
+    border-bottom: 1px solid #2f3542;
+  }
+
+  .setting-label {
+    color: $text;
+  }
+
+  .setting-control {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .host-field {
+    width: 190px;
+  }
+
+  .port-field {
+    width: 86px;
+  }
+
+  .sep {
+    margin: 0 4px;
+  }
+
+  .zoom-label {
+    width: 64px;
+    margin-left: 6px;
+    text-align: center;
+  }
+
+  .toggle {
+    position: relative;
+    width: 54px;
+    height: 30px;
+    border-radius: 15px;
+    background-color: $btn;
+
+    .knob {
+      position: absolute;
+      left: 3px;
+      top: 3px;
+      width: 24px;
+      height: 24px;
+      border-radius: 12px;
+      background-color: #cfd5e2;
+    }
+
+    &.on {
+      background-color: $accent;
+
+      .knob {
+        left: 27px;
+        background-color: #ffffff;
+      }
+    }
+  }
+
+  .segmented {
+    border-radius: 8px;
+    overflow: hidden;
+    background-color: $btn;
+  }
+
+  .segment {
+    padding: 8px 14px;
+
+    &.selected {
+      background-color: $accent;
+    }
+  }
+
+  // ---------------------------------------------------------------- keyboard bar
+  .kb-bar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    height: 50px;
+    padding: 0 8px;
+    background-color: $bar;
+    border-top: 2px solid $accent;
+  }
+
+  .kb-icon {
+    width: 26px;
+    height: 26px;
+    margin-right: 8px;
+  }
+
+  .kb-input {
+    flex: 1;
+    height: 36px;
+    padding: 0 10px;
+    box-sizing: border-box;
+    font-size: 16px;
+    color: $text;
+    border: none;
+    border-radius: 8px;
+    background-color: #0f1115;
+    outline: none;
+  }
+}
+
+@keyframes browser-loading {
+  0% {
+    left: -30%;
+  }
+  100% {
+    left: 100%;
+  }
+}
