@@ -34,7 +34,7 @@ so the browser is split in two:
 
 ## Install
 
-Run `EFB-Browser-Setup-<version>.exe` (requires Microsoft Edge or Google Chrome, and MSFS 2024 started
+Run `EFB-Browser-Setup-<version>.msi` from the [latest release](https://github.com/emergencybutter/butter-efb-browser/releases/latest) (requires Microsoft Edge or Google Chrome, and MSFS 2024 started
 at least once). It installs per user, without admin rights:
 
 - the companion in `%LOCALAPPDATA%\Programs\EFB Browser Companion\`,
@@ -55,11 +55,12 @@ Requirements: [Rust](https://rustup.rs), Node.js 18+, and [Inno Setup 6](https:/
 for the installer (`winget install JRSoftware.InnoSetup`).
 
 ```
-powershell -ExecutionPolicy Bypass -File installer\build.ps1     # -> dist\EFB-Browser-Setup-<version>.exe
+powershell -ExecutionPolicy Bypass -File installer\build.ps1     # -> dist\EFB-Browser-Setup-<version>.msi (and .exe)
 ```
 
 It builds the EFB app (`npm run build`), assembles its package (`node efb\pack.js`), builds the companion
-(which embeds that package) and compiles `installer\EFBBrowser.iss`. Bump the version in `companion/Cargo.toml`.
+(which embeds that package) and the installers: `installer\EFBBrowser.wxs` (MSI, the one released) and `installer\EFBBrowser.iss`
+(Inno Setup, compressed and uncompressed). Bump the version in `companion/Cargo.toml`.
 
 Without installing, for development:
 
