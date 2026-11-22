@@ -1,6 +1,6 @@
 [package]
 name = "efb-browser-companion"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 description = "Headless Chromium host that streams web pages to the MSFS 2024 EFB Browser app"
 license = "MIT"
@@ -24,7 +24,9 @@ windows-sys = { version = "0.61", features = [
   "Win32_System_Console",
   "Win32_System_Diagnostics_ToolHelp",
   "Win32_System_JobObjects",
+  "Win32_System_Registry",
   "Win32_System_Threading",
+  "Win32_UI_WindowsAndMessaging",
 ] }
 
 [profile.release]

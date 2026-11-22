@@ -291,17 +291,53 @@ fn start_detached(exe: &Path) -> Result<()> {
     cmd.spawn().map(|_| ()).context("cannot start the companion")
 }
 
-pub fn install() -> Result<()> {
+/// Options of `--install`, set by the MSI installer.
+#[derive(Default)]
+pub struct InstallOptions {
+    /// `--replace-inno`: forget an install made by the earlier Inno Setup installer (same folder),
+    /// so that only the MSI is listed in Settings > Apps.
+    pub replace_inno: bool,
+    /// `--error-dialog`: report a failure in a message box (the MSI only shows a generic error).
+    pub error_dialog: bool,
+}
+
+/// Uninstall key written by the Inno Setup installer (installer/EFBBrowser.iss: AppId + "_is1").
+const INNO_UNINSTALL_KEY: &str =
+    r"Software\Microsoft\Windows\CurrentVersion\Uninstall\{6A08559A-D3A6-46AB-9994-0477F400A5BE}_is1";
+
+pub fn install(opts: &InstallOptions) -> Result<()> {
     let mut r = Report(String::new());
-    let result = install_steps(&mut r);
+    let result = install_steps(&mut r, opts);
     if let Err(e) = &result {
         r.line(format!("Error: {e:#}"));
     }
     r.save();
+    if let (Err(e), true) = (&result, opts.error_dialog) {
+        win::error_dialog(
+            "EFB Web Browser setup",
+            &format!(
+                "The EFB Browser could not be set up for Microsoft Flight Simulator 2024:\n\n{e:#}\n\nDetails: {}",
+                data_dir().join("install.log").display()
+            ),
+        );
+    }
     result
 }
 
-fn install_steps(r: &mut Report) -> Result<()> {
+/// The Inno uninstaller would run `--uninstall` and delete our exe: drop it and its Apps entry
+/// instead (the MSI now owns the same files).
+fn replace_inno(r: &mut Report) {
+    let mut removed = win::delete_user_registry_key(INNO_UNINSTALL_KEY);
+    let dir = install_dir();
+    for name in ["unins000.exe", "unins000.dat"] {
+        removed |= fs::remove_file(dir.join(name)).is_ok();
+    }
+    if removed {
+        r.line("Replaced the previous (Inno Setup) installation");
+    }
+}
+
+fn install_steps(r: &mut Report, opts: &InstallOptions) -> Result<()> {
     r.line(format!("Installing {ADDON_NAME}"));
     let sims = find_sims();
     if sims.is_empty() {
@@ -310,6 +346,9 @@ fn install_steps(r: &mut Report) -> Result<()> {
     let exe = install_dir().join(EXE_NAME);
     stop_running(&exe, r);
     copy_self(&exe)?;
+    if opts.replace_inno {
+        replace_inno(r);
+    }
     r.line(format!("Companion: {}", exe.display()));
 
     for sim in &sims {

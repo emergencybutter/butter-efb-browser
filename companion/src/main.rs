@@ -170,7 +170,14 @@ fn main() {
 
     if has("--install") || has("--uninstall") {
         win::attach_parent_console();
-        let result = if has("--install") { install::install() } else { install::uninstall() };
+        let result = if has("--install") {
+            install::install(&install::InstallOptions {
+                replace_inno: has("--replace-inno"),
+                error_dialog: has("--error-dialog"),
+            })
+        } else {
+            install::uninstall()
+        };
         std::process::exit(if result.is_ok() { 0 } else { 1 });
     }
 

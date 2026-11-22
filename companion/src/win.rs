@@ -191,6 +191,27 @@ mod imp {
             ok
         }
     }
+
+    pub fn error_dialog(title: &str, text: &str) {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            MessageBoxW, MB_ICONERROR, MB_OK, MB_SETFOREGROUND, MB_TOPMOST,
+        };
+        let (title, text) = (wide(title), wide(text));
+        unsafe {
+            MessageBoxW(
+                std::ptr::null_mut(),
+                text.as_ptr(),
+                title.as_ptr(),
+                MB_OK | MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND,
+            );
+        }
+    }
+
+    pub fn delete_user_registry_key(subkey: &str) -> bool {
+        use windows_sys::Win32::System::Registry::{RegDeleteTreeW, HKEY_CURRENT_USER};
+        let subkey = wide(subkey);
+        unsafe { RegDeleteTreeW(HKEY_CURRENT_USER, subkey.as_ptr()) == 0 }
+    }
 }
 
 #[cfg(not(windows))]
@@ -213,6 +234,10 @@ mod imp {
     pub fn terminate(_pid: u32, _wait_ms: u32) -> bool {
         false
     }
+    pub fn error_dialog(_title: &str, _text: &str) {}
+    pub fn delete_user_registry_key(_subkey: &str) -> bool {
+        false
+    }
 }
 
 /// Attach to the console of the parent process (when started from a terminal). Returns false
@@ -223,6 +248,10 @@ pub use imp::attach_parent_console;
 pub use imp::setup_console;
 /// Send stdout and stderr to a file (background mode).
 pub use imp::redirect_output;
+/// Modal error message box, on top of other windows (an installer's).
+pub use imp::error_dialog;
+/// Delete a key and its subkeys under HKEY_CURRENT_USER. True if it existed and was deleted.
+pub use imp::delete_user_registry_key;
 /// Put this process (and the browser it starts) in a job that is killed when we exit, however we exit.
 pub use imp::kill_children_on_exit;
 pub use imp::{find_processes, find_processes_by_path, terminate};

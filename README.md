@@ -47,7 +47,9 @@ which removes the `EXE.xml` entry and the Community package (browser data is kep
 `%LOCALAPPDATA%\EFB Browser Companion\`, with `companion.log` and `install.log`).
 
 The setup only copies the .exe and runs `efb-browser-companion.exe --install` (the EFB package is
-embedded in the .exe); `--uninstall` undoes it. Both also work without the installer.
+embedded in the .exe); `--uninstall` undoes it. Both also work without the installer. The MSI also
+passes `--replace-inno` (takes over an install made by the older `EFB-Browser-Setup-*.exe`, so it is
+upgraded in place) and `--error-dialog` (shows why setup failed, unless installing silently).
 
 ## Building
 

@@ -46,8 +46,8 @@ $wix = @(
     "$env:ProgramFiles\WiX Toolset v7.0\bin\wix.exe"
 ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
 if ($wix) {
-    Run $wix @('extension', 'add', '-g', 'WixToolset.Util.wixext/7.0.1')
-    Run $wix @('build', '-arch', 'x64', '-ext', 'WixToolset.Util.wixext', '-d', "Version=$version",
+    Run $wix @('extension', 'add', '-g', 'WixToolset.Util.wixext/7.0.1', 'WixToolset.UI.wixext/7.0.1')
+    Run $wix @('build', '-arch', 'x64', '-ext', 'WixToolset.Util.wixext', '-ext', 'WixToolset.UI.wixext', '-d', "Version=$version",
         '-o', "$root\dist\EFB-Browser-Setup-$version.msi", "$PSScriptRoot\EFBBrowser.wxs")
 } else {
     Write-Warning 'WiX 7 not found, MSI skipped: winget install WiXToolset.WiXCLI'

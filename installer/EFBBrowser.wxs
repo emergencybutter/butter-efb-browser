@@ -18,6 +18,53 @@
     <!-- Stored, not compressed: compressed payloads score as "obfuscated" with some AV heuristics. -->
     <MediaTemplate EmbedCab="yes" CompressionLevel="none" />
 
+    <!-- The install step needs the sim's UserCfg.opt (Store or Steam): check up front, with a clear message. -->
+    <Property Id="MSFS_STORE">
+      <DirectorySearch Id="StoreCfgDir" Depth="0"
+                       Path="[LocalAppDataFolder]Packages\Microsoft.Limitless_8wekyb3d8bbwe\LocalCache">
+        <FileSearch Name="UserCfg.opt" />
+      </DirectorySearch>
+    </Property>
+    <Property Id="MSFS_STEAM">
+      <DirectorySearch Id="SteamCfgDir" Depth="0" Path="[AppDataFolder]Microsoft Flight Simulator 2024">
+        <FileSearch Name="UserCfg.opt" />
+      </DirectorySearch>
+    </Property>
+    <Launch Condition="Installed OR MSFS_STORE OR MSFS_STEAM"
+            Message="Microsoft Flight Simulator 2024 was not found for this Windows user. Start the sim once (until its main menu), quit it, then run this installer again." />
+
+    <!-- Welcome, Install, Finish: like WixUI_Minimal, without its license page. -->
+    <UI Id="EFBBrowserUI">
+      <TextStyle Id="WixUI_Font_Normal" FaceName="Segoe UI" Size="9" />
+      <TextStyle Id="WixUI_Font_Bigger" FaceName="Segoe UI" Size="12" />
+      <TextStyle Id="WixUI_Font_Title" FaceName="Segoe UI" Size="9" Bold="yes" />
+      <Property Id="DefaultUIFont" Value="WixUI_Font_Normal" />
+      <DialogRef Id="ErrorDlg" />
+      <DialogRef Id="FatalError" />
+      <DialogRef Id="FilesInUse" />
+      <DialogRef Id="MsiRMFilesInUse" />
+      <DialogRef Id="PrepareDlg" />
+      <DialogRef Id="ProgressDlg" />
+      <DialogRef Id="ResumeDlg" />
+      <DialogRef Id="UserExit" />
+      <DialogRef Id="WelcomeDlg" />
+      <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" />
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" Order="1"
+               Condition="NOT Installed" />
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="MaintenanceTypeDlg" Order="2"
+               Condition="Installed" />
+      <Publish Dialog="MaintenanceWelcomeDlg" Control="Next" Event="NewDialog" Value="MaintenanceTypeDlg" />
+      <Publish Dialog="MaintenanceTypeDlg" Control="RepairButton" Event="NewDialog" Value="VerifyReadyDlg" />
+      <Publish Dialog="MaintenanceTypeDlg" Control="RemoveButton" Event="NewDialog" Value="VerifyReadyDlg" />
+      <Publish Dialog="MaintenanceTypeDlg" Control="Back" Event="NewDialog" Value="MaintenanceWelcomeDlg" />
+      <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return" Order="999" />
+    </UI>
+    <UIRef Id="WixUI_Common" />
+    <WixVariable Id="WixUIDialogBmp" Value="$(sys.SOURCEFILEDIR)WixUIDialog.bmp" />
+    <WixVariable Id="WixUIBannerBmp" Value="$(sys.SOURCEFILEDIR)WixUIBanner.bmp" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT"
+              Value="Start Microsoft Flight Simulator 2024, open the EFB tablet and launch the Browser app. The companion starts and stops with the sim." />
+
     <Icon Id="app.ico" SourceFile="$(sys.SOURCEFILEDIR)..\companion\assets\app.ico" />
     <Property Id="ARPPRODUCTICON" Value="app.ico" />
     <Property Id="ARPURLINFOABOUT" Value="https://butr.cc" />
@@ -51,12 +98,17 @@
     <util:CloseApplication Id="CloseCompanion" Target="efb-browser-companion.exe"
                            CloseMessage="no" TerminateProcess="0" RebootPrompt="no" />
 
-    <CustomAction Id="RunInstall" FileRef="CompanionExe" ExeCommand="--install"
+    <!-- replace-inno: take over an install made by the earlier Inno Setup installer (same folder).
+         error-dialog: show why it failed (Windows Installer only reports error 1722); not when silent. -->
+    <CustomAction Id="RunInstall" FileRef="CompanionExe" ExeCommand="--install --replace-inno --error-dialog"
+                  Execute="deferred" Impersonate="yes" Return="check" />
+    <CustomAction Id="RunInstallSilent" FileRef="CompanionExe" ExeCommand="--install --replace-inno"
                   Execute="deferred" Impersonate="yes" Return="check" />
     <CustomAction Id="RunUninstall" FileRef="CompanionExe" ExeCommand="--uninstall"
                   Execute="deferred" Impersonate="yes" Return="ignore" />
     <InstallExecuteSequence>
-      <Custom Action="RunInstall" After="InstallFiles" Condition="NOT REMOVE~=&quot;ALL&quot;" />
+      <Custom Action="RunInstall" After="InstallFiles" Condition="NOT REMOVE~=&quot;ALL&quot; AND UILevel &gt; 2" />
+      <Custom Action="RunInstallSilent" After="RunInstall" Condition="NOT REMOVE~=&quot;ALL&quot; AND UILevel &lt;= 2" />
       <Custom Action="RunUninstall" Before="RemoveFiles"
               Condition="REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
     </InstallExecuteSequence>
