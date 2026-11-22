@@ -37,9 +37,15 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist
+#ifdef NoCompression
+; Stored, not compressed: a compressed payload scores as "obfuscated" with some AV heuristics.
+OutputBaseFilename=EFB-Browser-Setup-{#AppVersion}-uncompressed
+Compression=none
+#else
 OutputBaseFilename=EFB-Browser-Setup-{#AppVersion}
 Compression=lzma2
 SolidCompression=yes
+#endif
 WizardStyle=modern
 UninstallDisplayIcon={app}\{#ExeName}
 UninstallDisplayName=EFB Web Browser for MSFS 2024

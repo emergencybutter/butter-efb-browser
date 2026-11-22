@@ -36,5 +36,21 @@ $iscc = @(
     "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
 ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
 if (-not $iscc) { throw 'Inno Setup 6 not found: winget install JRSoftware.InnoSetup' }
-Run $iscc @("/DAppVersion=$version", "$PSScriptRoot\EFBBrowser.iss")
-Write-Host "`nInstaller: $root\dist\EFB-Browser-Setup-$version.exe" -ForegroundColor Green
+Run $iscc @("/Q", "/DAppVersion=$version", "$PSScriptRoot\EFBBrowser.iss")
+Run $iscc @("/Q", "/DAppVersion=$version", "/DNoCompression", "$PSScriptRoot\EFBBrowser.iss")
+
+Step 'MSI'
+# WiX 7 (winget install WiXToolset.WiXCLI) needs its OSMF EULA accepted once: wix eula accept wix7
+$wix = @(
+    (Get-Command wix -ErrorAction SilentlyContinue).Source,
+    "$env:ProgramFiles\WiX Toolset v7.0\bin\wix.exe"
+) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+if ($wix) {
+    Run $wix @('extension', 'add', '-g', 'WixToolset.Util.wixext/7.0.1')
+    Run $wix @('build', '-arch', 'x64', '-ext', 'WixToolset.Util.wixext', '-d', "Version=$version",
+        '-o', "$root\dist\EFB-Browser-Setup-$version.msi", "$PSScriptRoot\EFBBrowser.wxs")
+} else {
+    Write-Warning 'WiX 7 not found, MSI skipped: winget install WiXToolset.WiXCLI'
+}
+Write-Host "`nInstallers in $root\dist:" -ForegroundColor Green
+Get-ChildItem "$root\dist\EFB-Browser-Setup-$version*" -Include *.exe, *.msi | ForEach-Object { Write-Host "  $($_.Name)" -ForegroundColor Green }
