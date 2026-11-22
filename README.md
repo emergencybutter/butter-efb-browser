@@ -7,15 +7,16 @@ so the browser is split in two:
 
 ```
  ┌──────────── PC ────────────┐                       ┌──────── MSFS 2024 EFB ────────┐
- │ companion (Node.js)        │   ws://127.0.0.1:8737  │ Browser app (TypeScript)      │
+ │ companion (Rust, 1 .exe)   │   ws://127.0.0.1:8737  │ Browser app (TypeScript)      │
  │  headless Edge/Chrome  ────┼── JPEG frames ───────▶ │  shows frames                 │
  │  (real Chromium engine)  ◀─┼── mouse / keys / nav ──┤  toolbar, URL bar, keyboard   │
  └────────────────────────────┘                       └───────────────────────────────┘
 ```
 
-- **companion/**: runs a real Chromium (the Microsoft Edge already installed on Windows, no download)
-  in headless mode, streams the page through the DevTools screencast and injects input.
-  Cookies and logins persist in `companion/profile/`.
+- **companion/**: a small Rust program (single ~4 MB .exe, no runtime to install) that runs a real
+  Chromium (the Microsoft Edge already installed on Windows, no download) in headless mode, streams
+  the page through the DevTools screencast and injects input. MSFS starts and stops it (EXE.xml).
+  Cookies and logins persist in `%LOCALAPPDATA%\EFB Browser Companion\profile`.
 - **efb/**: the EFB app (MSFS 2024 SDK DevMode project + build scripts).
 
 ## Features
@@ -31,17 +32,40 @@ so the browser is split in two:
 - Audio plays on the PC (YouTube, LiveATC...)
 - Streaming pauses when the app is not visible on the EFB
 
-## Quick start
+## Install
 
-Requirements: Node.js 18+ and Microsoft Edge or Google Chrome.
+Run `EFB-Browser-Setup-<version>.exe` (requires Microsoft Edge or Google Chrome, and MSFS 2024 started
+at least once). It installs per user, without admin rights:
 
-1. **Start the companion** (leave it running while flying):
-   ```
-   companion\start-companion.bat
-   ```
-   It installs dependencies on first run. You can test it without the sim at <http://127.0.0.1:8737/>.
+- the companion in `%LOCALAPPDATA%\Programs\EFB Browser Companion\`,
+- the EFB app in the sim's Community folder (found through `UserCfg.opt`, Store and Steam versions),
+- an entry in the sim's `EXE.xml` (backed up first) so that **MSFS starts the companion** in the
+  background and it **quits when the sim exits**.
 
-2. **Build and install the EFB app**:
+Then start a flight, open the EFB and launch the **Browser** app. Uninstall from Windows Settings > Apps,
+which removes the `EXE.xml` entry and the Community package (browser data is kept in
+`%LOCALAPPDATA%\EFB Browser Companion\`, with `companion.log` and `install.log`).
+
+The setup only copies the .exe and runs `efb-browser-companion.exe --install` (the EFB package is
+embedded in the .exe); `--uninstall` undoes it. Both also work without the installer.
+
+## Building
+
+Requirements: [Rust](https://rustup.rs), Node.js 18+, and [Inno Setup 6](https://jrsoftware.org/isinfo.php)
+for the installer (`winget install JRSoftware.InnoSetup`).
+
+```
+powershell -ExecutionPolicy Bypass -File installer\build.ps1     # -> dist\EFB-Browser-Setup-<version>.exe
+```
+
+It builds the EFB app (`npm run build`), assembles its package (`node efb\pack.js`), builds the companion
+(which embeds that package) and compiles `installer\EFBBrowser.iss`. Bump the version in `companion/Cargo.toml`.
+
+Without installing, for development:
+
+1. **Companion**: `companion\start-companion.bat` (builds it on first run, then runs it with a console).
+   Test it without the sim at <http://127.0.0.1:8737/>.
+2. **EFB app**:
    ```
    cd efb\PackageSources\BrowserApp
    npm install
@@ -50,27 +74,34 @@ Requirements: Node.js 18+ and Microsoft Edge or Google Chrome.
    node pack.js --install      # copies efb\Packages\buttersim-efb-browser to your Community folder
    ```
    (Or open `efb\EFBBrowserProject.xml` in the sim's DevMode Project Editor and build it there.)
-
-3. Start a flight, open the EFB and launch the **Browser** app.
+   Rebuild the companion afterwards if you want `--install` / the installer to ship the new EFB app.
 
 ## Companion options
 
-`start-companion.bat [options]` or `npm start -- [options]` (in `companion/`):
+`start-companion.bat [options]`, `efb-browser-companion.exe [options]` or `cargo run --release -- [options]`
+(in `companion/`). `--help` lists them:
 
 | Option | Env var | Default | |
 |---|---|---|---|
 | `--port 8737` | `EFB_BROWSER_PORT` | 8737 | WebSocket / HTTP port |
 | `--host 127.0.0.1` | `EFB_BROWSER_HOST` | 127.0.0.1 | `0.0.0.0` to accept other machines (then set the address in the EFB settings) |
-| `--home <url>` | `EFB_BROWSER_HOME` | google.com | Home page |
+| `--home <url>` | `EFB_BROWSER_HOME` | butr.cc | Home page |
 | `--search <url with %s>` | `EFB_BROWSER_SEARCH` | Google | Search engine |
 | `--browser <exe>` | `EFB_BROWSER_EXE` | Edge, then Chrome | Chromium executable |
-| `--profile <dir>` | `EFB_BROWSER_PROFILE` | `companion/profile` | Persistent browser profile |
+| `--profile <dir>` | `EFB_BROWSER_PROFILE` | `%LOCALAPPDATA%\EFB Browser Companion\profile` | Persistent browser profile |
 | `--render-scale 2` | `EFB_BROWSER_RENDER_SCALE` | 2 | Internal render DPI; text stays sharp up to this zoom |
 | `--show` | `EFB_BROWSER_SHOW=true` | off | Show the browser window (debugging) |
 | `--verbose` | `EFB_BROWSER_VERBOSE=true` | off | Log failed commands |
+| `--exit-with-sim` | | off | Background mode used by `EXE.xml`: no console, logs to `companion.log`, quits when MSFS exits |
 
 ## Development
 
+- `companion/`: `cargo run -- --port 8738 --verbose` runs a second instance next to a running one
+  (use another `--profile` too: a browser profile can only be used by one browser at a time).
+  `cargo test` runs the unit tests. Sources: `host.rs` (tabs, screencast, input), `cdp.rs` (DevTools
+  protocol client), `server.rs` (HTTP/WebSocket), `install.rs` (`--install` / `--uninstall`, EXE.xml),
+  `win.rs` (console, job object, process lookup), `assets/` (page script and debug viewer, embedded in the .exe).
+  `EFB_BROWSER_SIM_PROCESS=notepad.exe` makes `--exit-with-sim` watch another process, to test without the sim.
 - `efb/PackageSources/BrowserApp`: `npm run watch` rebuilds on change.
 - **Dev harness**: `npm run harness`, then open `dev/harness.html` in Edge/Chrome (with the companion running).
   It mounts the real `BrowserPage` component outside the sim with the Coherent API stubbed, so you can
@@ -93,5 +124,5 @@ HTTP transport the image is fetched from `/frame/<id>.jpg`), `state {url,title,l
 - Video plays at the screencast frame rate (roughly 10–30 fps depending on the page and the PC).
 - Not tested in VR yet; the OS keyboard path (`SetInputTextFromOS`) is wired but unverified.
 - If frames don't display in the sim, switch **Frame transport** to HTTP in the settings.
-- Ideas: bookmarks, a tab list, pinch zoom, packaging the companion as a single .exe (Node SEA), and
-  auto-starting it through `exe.xml`.
+- The installer and the .exe are not code-signed: Windows SmartScreen warns on first run.
+- Ideas: bookmarks, a tab list, pinch zoom, binary WebSocket frames.

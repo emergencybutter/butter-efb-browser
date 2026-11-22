@@ -3,11 +3,11 @@
  * It reports focus changes on editable elements and intercepts <select>
  * elements, whose native popup is not rendered in headless screencasts.
  *
- * It communicates through bindings exposed by the companion:
- *   window.__efbFocus({ editable, inputType, value })
- *   window.__efbSelect({ options: [{ label, disabled }], selectedIndex })
+ * It communicates through CDP bindings (Runtime.addBinding) that take one string argument:
+ *   window.__efbFocus(JSON.stringify({ editable, inputType, value }))
+ *   window.__efbSelect(JSON.stringify({ options: [{ label, disabled }], selectedIndex }))
  */
-export const PAGE_SCRIPT = `(() => {
+(() => {
   if (window.__efbInstalled) return;
   window.__efbInstalled = true;
 
@@ -31,11 +31,11 @@ export const PAGE_SCRIPT = `(() => {
     const el = deepActive();
     const editable = isEditable(el);
     try {
-      window.__efbFocus && window.__efbFocus({
+      window.__efbFocus && window.__efbFocus(JSON.stringify({
         editable,
         inputType: editable && el.tagName === 'INPUT' ? (el.type || 'text') : (editable ? 'text' : ''),
         value: editable && 'value' in el ? String(el.value).slice(0, 2000) : '',
-      });
+      }));
     } catch (e) {}
   };
 
@@ -51,10 +51,10 @@ export const PAGE_SCRIPT = `(() => {
     sel.focus();
     window.__efbActiveSelect = sel;
     try {
-      window.__efbSelect && window.__efbSelect({
+      window.__efbSelect && window.__efbSelect(JSON.stringify({
         options: Array.from(sel.options).map((o) => ({ label: o.label || o.text, disabled: o.disabled })),
         selectedIndex: sel.selectedIndex,
-      });
+      }));
     } catch (e) {}
   }, true);
 
@@ -69,4 +69,4 @@ export const PAGE_SCRIPT = `(() => {
     }
     return true;
   };
-})();`;
+})();

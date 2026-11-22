@@ -1,7 +1,11 @@
 @echo off
 title EFB Browser Companion
 cd /d "%~dp0"
-where node >nul 2>nul || (echo Node.js is required: https://nodejs.org & pause & exit /b 1)
-if not exist node_modules (call npm install --omit=dev || (pause & exit /b 1))
-node src\server.js %*
+set "EXE=%~dp0efb-browser-companion.exe"
+if not exist "%EXE%" set "EXE=%~dp0target\release\efb-browser-companion.exe"
+if not exist "%EXE%" (
+  where cargo >nul 2>nul || (echo Rust is required to build the companion: https://rustup.rs & pause & exit /b 1)
+  cargo build --release || (pause & exit /b 1)
+)
+"%EXE%" %*
 pause
