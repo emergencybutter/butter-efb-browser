@@ -1,6 +1,6 @@
 [package]
 name = "efb-browser-companion"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 description = "Headless Chromium host that streams web pages to the MSFS 2024 EFB Browser app"
 license = "MIT"

@@ -1,7 +1,7 @@
-# Builds dist\EFB-Browser-Setup-<version>.exe:
+# Builds dist\EFB-Browser-Setup-<version>.msi and .exe:
 #   1. the EFB app (npm run build) and its Community package (node efb\pack.js)
 #   2. the companion, which embeds that package (cargo build --release)
-#   3. the installer (Inno Setup 6)
+#   3. the installers (Inno Setup 6, then WiX 7)
 #
 # Usage: powershell -ExecutionPolicy Bypass -File installer\build.ps1 [-SkipEfb]
 param([switch]$SkipEfb)
@@ -37,7 +37,6 @@ $iscc = @(
 ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
 if (-not $iscc) { throw 'Inno Setup 6 not found: winget install JRSoftware.InnoSetup' }
 Run $iscc @("/Q", "/DAppVersion=$version", "$PSScriptRoot\EFBBrowser.iss")
-Run $iscc @("/Q", "/DAppVersion=$version", "/DNoCompression", "$PSScriptRoot\EFBBrowser.iss")
 
 Step 'MSI'
 # WiX 7 (winget install WiXToolset.WiXCLI) needs its OSMF EULA accepted once: wix eula accept wix7

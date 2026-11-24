@@ -67,7 +67,7 @@ powershell -ExecutionPolicy Bypass -File installer\build.ps1     # -> dist\EFB-B
 
 It builds the EFB app (`npm run build`), assembles its package (`node efb\pack.js`), builds the companion
 (which embeds that package) and the installers: `installer\EFBBrowser.wxs` (MSI, the one released) and `installer\EFBBrowser.iss`
-(Inno Setup, compressed and uncompressed). Bump the version in `companion/Cargo.toml`.
+(Inno Setup). Bump the version in `companion/Cargo.toml`.
 
 Without installing, for development:
 
