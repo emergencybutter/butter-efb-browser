@@ -49,7 +49,7 @@ SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayIcon={app}\{#ExeName}
 UninstallDisplayName=EFB Web Browser for MSFS 2024
-; A running companion locks the exe: close it (it is restarted by --install if the sim runs).
+; A running companion locks the exe: close it (setup refuses to run while the sim is up, see PrepareToInstall).
 CloseApplications=force
 RestartApplications=no
 
@@ -64,6 +64,33 @@ Name: "{userprograms}\EFB Browser Companion"; Filename: "{app}\{#ExeName}"
 FinishedLabel=The EFB Browser app is installed. Start Microsoft Flight Simulator 2024 and open the Browser app on the EFB: the companion starts and stops with the sim.
 
 [Code]
+function SimRunning(): Boolean;
+var
+  Locator, Wmi, Procs: Variant;
+begin
+  Result := False;
+  try
+    Locator := CreateOleObject('WbemScripting.SWbemLocator');
+    Wmi := Locator.ConnectServer('.', 'root\CIMV2');
+    Procs := Wmi.ExecQuery('SELECT ProcessId FROM Win32_Process WHERE Name = ''FlightSimulator2024.exe''');
+    Result := Procs.Count > 0;
+  except
+  end;
+end;
+
+// The sim only loads Community packages when it starts: installing under a running sim makes the
+// Browser app vanish from the EFB until the next start.
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  Result := '';
+  while SimRunning() do
+    if MsgBox('Microsoft Flight Simulator 2024 is running. Quit the sim, then click Retry.', mbError, MB_RETRYCANCEL) = IDCANCEL then
+    begin
+      Result := 'Quit Microsoft Flight Simulator 2024, then run the installer again.';
+      Exit;
+    end;
+end;
+
 function RunCompanion(const Args: String): Integer;
 var
   ResultCode: Integer;

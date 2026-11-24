@@ -30,7 +30,12 @@
         <FileSearch Name="UserCfg.opt" />
       </DirectorySearch>
     </Property>
-    <Launch Condition="Installed OR MSFS_STORE OR MSFS_STEAM"
+    <!-- Store data moved to another drive: the package folder is a junction into a protected WpSystem
+         folder that the search above cannot read. The install step then asks for administrator rights. -->
+    <Property Id="MSFS_STORE_PKG">
+      <DirectorySearch Id="StorePkgDir" Depth="0" Path="[LocalAppDataFolder]Packages\Microsoft.Limitless_8wekyb3d8bbwe" />
+    </Property>
+    <Launch Condition="Installed OR MSFS_STORE OR MSFS_STORE_PKG OR MSFS_STEAM"
             Message="Microsoft Flight Simulator 2024 was not found for this Windows user. Start the sim once (until its main menu), quit it, then run this installer again." />
 
     <!-- Welcome, Install, Finish: like WixUI_Minimal, without its license page. -->
@@ -98,11 +103,17 @@
     <util:CloseApplication Id="CloseCompanion" Target="efb-browser-companion.exe"
                            CloseMessage="no" TerminateProcess="0" RebootPrompt="no" />
 
+    <!-- The sim only loads Community packages when it starts, and holds their files open: ask to quit it
+         first (Abort / Retry / Ignore; the install step itself refuses to run while the sim is up). -->
+    <util:CloseApplication Id="CloseSim" Target="FlightSimulator2024.exe" PromptToContinue="yes"
+                           Description="Microsoft Flight Simulator 2024 is running. Quit the sim, then click Retry."
+                           CloseMessage="no" EndSessionMessage="no" RebootPrompt="no" />
+
     <!-- replace-inno: take over an install made by the earlier Inno Setup installer (same folder).
          error-dialog: show why it failed (Windows Installer only reports error 1722); not when silent. -->
     <CustomAction Id="RunInstall" FileRef="CompanionExe" ExeCommand="--install --replace-inno --error-dialog"
                   Execute="deferred" Impersonate="yes" Return="check" />
-    <CustomAction Id="RunInstallSilent" FileRef="CompanionExe" ExeCommand="--install --replace-inno"
+    <CustomAction Id="RunInstallSilent" FileRef="CompanionExe" ExeCommand="--install --replace-inno --no-elevate"
                   Execute="deferred" Impersonate="yes" Return="check" />
     <CustomAction Id="RunUninstall" FileRef="CompanionExe" ExeCommand="--uninstall"
                   Execute="deferred" Impersonate="yes" Return="ignore" />

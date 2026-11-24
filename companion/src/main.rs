@@ -168,12 +168,16 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let has = |flag: &str| args.iter().any(|a| a == flag);
 
+    if has("--install-sim") || has("--uninstall-sim") {
+        std::process::exit(install::elevated_helper(&args));
+    }
     if has("--install") || has("--uninstall") {
         win::attach_parent_console();
         let result = if has("--install") {
             install::install(&install::InstallOptions {
                 replace_inno: has("--replace-inno"),
                 error_dialog: has("--error-dialog"),
+                no_elevate: has("--no-elevate"),
             })
         } else {
             install::uninstall()

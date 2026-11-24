@@ -42,6 +42,11 @@ at least once). It installs per user, without admin rights:
 - an entry in the sim's `EXE.xml` (backed up first) so that **MSFS starts the companion** in the
   background and it **quits when the sim exits**.
 
+If Windows denies access to the sim's folders (typically a Store/Xbox install whose data was moved to
+another drive, where the package folder is a junction into a protected `WpSystem` folder), setup asks
+for administrator rights for that step only (`--install-sim` / `--uninstall-sim`, not in silent installs).
+
+Quit the sim before running setup (it asks): the sim only picks up Community packages when it starts.
 Then start a flight, open the EFB and launch the **Browser** app. Uninstall from Windows Settings > Apps,
 which removes the `EXE.xml` entry and the Community package (browser data is kept in
 `%LOCALAPPDATA%\EFB Browser Companion\`, with `companion.log` and `install.log`).

@@ -31,7 +31,10 @@ impl Report {
     fn save(&self) {
         let dir = data_dir();
         let _ = fs::create_dir_all(&dir);
-        let _ = fs::write(dir.join("install.log"), &self.0);
+        self.save_to(&dir.join("install.log"));
+    }
+    fn save_to(&self, path: &Path) {
+        let _ = fs::write(path, &self.0);
     }
 }
 
@@ -39,9 +42,11 @@ struct Sim {
     label: &'static str,
     /// Folder holding UserCfg.opt and EXE.xml.
     config_dir: PathBuf,
-    community: Option<PathBuf>,
 }
 
+/// The sim installs that have a UserCfg.opt for this user. One that cannot even be read still counts
+/// (Store data moved to another drive goes through a junction into a protected `WpSystem` folder):
+/// the install step then retries it with administrator rights, or reports why it failed.
 fn find_sims() -> Vec<Sim> {
     let mut candidates = Vec::new();
     if let Some(local) = std::env::var_os("LOCALAPPDATA") {
@@ -55,16 +60,41 @@ fn find_sims() -> Vec<Sim> {
     }
     candidates
         .into_iter()
-        .filter_map(|(label, dir)| {
-            let cfg = fs::read(dir.join("UserCfg.opt")).ok()?;
-            let cfg = String::from_utf8_lossy(&cfg);
-            let community = Regex::new(r#"(?m)^\s*InstalledPackagesPath\s+"([^"]+)""#)
-                .unwrap()
-                .captures(&cfg)
-                .map(|c| PathBuf::from(&c[1]).join("Community"));
-            Some(Sim { label, config_dir: dir, community })
-        })
+        .filter(|(_, dir)| !matches!(load_user_cfg(dir), Ok(None)))
+        .map(|(label, config_dir)| Sim { label, config_dir })
         .collect()
+}
+
+/// The part of UserCfg.opt we use: the Community folder (`None` if InstalledPackagesPath is missing).
+struct UserCfg {
+    community: Option<PathBuf>,
+}
+
+/// `Ok(None)` when there is no UserCfg.opt (sim not installed, or never started).
+fn load_user_cfg(config_dir: &Path) -> std::io::Result<Option<UserCfg>> {
+    let cfg = match fs::read(config_dir.join("UserCfg.opt")) {
+        Ok(b) => b,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e),
+    };
+    let cfg = String::from_utf8_lossy(&cfg);
+    let community = Regex::new(r#"(?m)^\s*InstalledPackagesPath\s+"([^"]+)""#)
+        .unwrap()
+        .captures(&cfg)
+        .map(|c| PathBuf::from(&c[1]).join("Community"));
+    Ok(Some(UserCfg { community }))
+}
+
+fn user_cfg_or_error(config_dir: &Path) -> Result<Option<UserCfg>> {
+    load_user_cfg(config_dir).with_context(|| format!("cannot read {}", config_dir.join("UserCfg.opt").display()))
+}
+
+/// True when Windows refused access somewhere in the error chain (administrator rights may help).
+fn access_denied(e: &anyhow::Error) -> bool {
+    e.chain().any(|c| {
+        c.downcast_ref::<std::io::Error>()
+            .is_some_and(|io| io.kind() == std::io::ErrorKind::PermissionDenied)
+    })
 }
 
 /// EXE.xml path, keeping the spelling of an existing file.
@@ -255,7 +285,7 @@ fn install_package(community: &Path) -> Result<PathBuf> {
     for (rel, data) in EFB_PACKAGE {
         let path = target.join(rel.replace('/', "\\"));
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).with_context(|| format!("cannot create {}", parent.display()))?;
         }
         fs::write(&path, data).with_context(|| format!("cannot write {}", path.display()))?;
     }
@@ -273,24 +303,6 @@ fn copy_self(target: &Path) -> Result<()> {
     Ok(())
 }
 
-fn start_detached(exe: &Path) -> Result<()> {
-    let mut cmd = std::process::Command::new(exe);
-    cmd.arg(EXIT_WITH_SIM);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const DETACHED_PROCESS: u32 = 0x0000_0008;
-        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-        const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
-        cmd.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB);
-        if cmd.spawn().is_ok() {
-            return Ok(());
-        }
-        cmd.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
-    }
-    cmd.spawn().map(|_| ()).context("cannot start the companion")
-}
-
 /// Options of `--install`, set by the MSI installer.
 #[derive(Default)]
 pub struct InstallOptions {
@@ -299,6 +311,8 @@ pub struct InstallOptions {
     pub replace_inno: bool,
     /// `--error-dialog`: report a failure in a message box (the MSI only shows a generic error).
     pub error_dialog: bool,
+    /// `--no-elevate`: never ask for administrator rights (silent installs).
+    pub no_elevate: bool,
 }
 
 /// Uninstall key written by the Inno Setup installer (installer/EFBBrowser.iss: AppId + "_is1").
@@ -339,6 +353,11 @@ fn replace_inno(r: &mut Report) {
 
 fn install_steps(r: &mut Report, opts: &InstallOptions) -> Result<()> {
     r.line(format!("Installing {ADDON_NAME}"));
+    // The sim reads the Community folder only when it starts: replacing the package under a running
+    // sim makes the Browser app vanish from the EFB until the next start.
+    if !win::find_processes(SIM_PROCESS).is_empty() {
+        bail!("Microsoft Flight Simulator 2024 is running. Quit the sim, then run the installer again.");
+    }
     let sims = find_sims();
     if sims.is_empty() {
         bail!("Microsoft Flight Simulator 2024 was not found. Start the sim once, then run the installer again.");
@@ -351,29 +370,130 @@ fn install_steps(r: &mut Report, opts: &InstallOptions) -> Result<()> {
     }
     r.line(format!("Companion: {}", exe.display()));
 
+    let mut errors = Vec::new();
     for sim in &sims {
         r.line(format!("MSFS 2024 ({}):", sim.label));
-        match (&sim.community, EFB_PACKAGE.is_empty()) {
-            (_, true) => r.line("  EFB app: not included in this build, skipped"),
-            (Some(community), false) => {
-                let target = install_package(community)?;
-                r.line(format!("  EFB app: {}", target.display()));
+        let mut result = install_sim(&sim.config_dir, &exe, r);
+        if let Err(e) = &result {
+            if access_denied(e) && !opts.no_elevate && !win::is_elevated() {
+                r.line(format!("  {e:#}"));
+                r.line("  Access denied: retrying with administrator rights");
+                let (dir, exe) = (sim.config_dir.to_string_lossy(), exe.to_string_lossy());
+                result = run_elevated(&["--install-sim", &dir, "--companion", &exe], r);
             }
-            (None, false) => r.line("  EFB app: Community folder not found in UserCfg.opt, skipped"),
         }
-        let xml = exe_xml_path(&sim.config_dir);
-        edit_exe_xml(&xml, true, |t| upsert_entry(t, &exe))?;
-        r.line(format!("  Auto-start: {}", xml.display()));
+        if let Err(e) = result {
+            r.line(format!("  Failed: {e:#}"));
+            errors.push(format!("MSFS 2024 ({}): {e:#}", sim.label));
+        }
+    }
+    if !errors.is_empty() {
+        bail!(errors.join("\n"));
     }
 
-    if !win::find_processes(SIM_PROCESS).is_empty() {
-        start_detached(&exe)?;
-        r.line("The sim is running: companion started.");
-    } else {
-        r.line("The companion will start with the sim.");
-    }
+    r.line("The companion will start with the sim.");
     r.line("Done.");
     Ok(())
+}
+
+/// Deploy the EFB package to one sim's Community folder and register the companion in its EXE.xml.
+fn install_sim(config_dir: &Path, exe: &Path, r: &mut Report) -> Result<()> {
+    let cfg = user_cfg_or_error(config_dir)?
+        .ok_or_else(|| anyhow!("{} not found", config_dir.join("UserCfg.opt").display()))?;
+    match (&cfg.community, EFB_PACKAGE.is_empty()) {
+        (_, true) => r.line("  EFB app: not included in this build, skipped"),
+        (Some(community), false) => {
+            let target = install_package(community)?;
+            r.line(format!("  EFB app: {}", target.display()));
+        }
+        (None, false) => r.line("  EFB app: Community folder not found in UserCfg.opt, skipped"),
+    }
+    let xml = exe_xml_path(config_dir);
+    edit_exe_xml(&xml, true, |t| upsert_entry(t, exe))?;
+    r.line(format!("  Auto-start: {}", xml.display()));
+    Ok(())
+}
+
+/// Remove one sim's EXE.xml entry and EFB package. Tries both; returns the first error.
+fn uninstall_sim(config_dir: &Path, r: &mut Report) -> Result<()> {
+    let Some(cfg) = user_cfg_or_error(config_dir)? else { return Ok(()) };
+    let mut errors: Vec<anyhow::Error> = Vec::new();
+    let xml = exe_xml_path(config_dir);
+    match edit_exe_xml(&xml, false, |t| {
+        remove_entries(t);
+        Ok(())
+    }) {
+        Ok(true) => r.line(format!("  Removed auto-start from {}", xml.display())),
+        Ok(false) => {}
+        Err(e) => errors.push(e),
+    }
+    if let Some(target) = cfg.community.map(|c| c.join(PACKAGE_NAME)) {
+        if target.exists() {
+            match fs::remove_dir_all(&target) {
+                Ok(()) => r.line(format!("  Removed {}", target.display())),
+                Err(e) => errors.push(anyhow::Error::new(e).context(format!("cannot remove {}", target.display()))),
+            }
+        }
+    }
+    for e in errors.iter().skip(1) {
+        r.line(format!("  {e:#}"));
+    }
+    errors.into_iter().next().map_or(Ok(()), Err)
+}
+
+// ------------------------------------------------------------------ administrator retry
+
+/// Run this exe again with administrator rights (UAC prompt) and `args`, wait for it, and copy its
+/// report into ours.
+fn run_elevated(args: &[&str], r: &mut Report) -> Result<()> {
+    let log = std::env::temp_dir().join(format!("efb-browser-elevated-{}.log", std::process::id()));
+    let _ = fs::remove_file(&log);
+    let log_arg = log.to_string_lossy();
+    let params = args
+        .iter()
+        .copied()
+        .chain(["--log", &log_arg])
+        // Paths cannot contain quotes; a trailing backslash would escape the closing one.
+        .map(|a| format!("\"{}\"", a.trim_end_matches('\\')))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let me = std::env::current_exe()?;
+    let code = win::run_elevated(&me, &params).map_err(|e| match e.raw_os_error() {
+        Some(1223) => anyhow!("administrator permission was not given"), // ERROR_CANCELLED
+        _ => anyhow!("cannot run with administrator rights: {e}"),
+    })?;
+    let output = fs::read_to_string(&log).unwrap_or_default();
+    let _ = fs::remove_file(&log);
+    let mut error = None;
+    for line in output.lines() {
+        r.line(line);
+        if let Some(e) = line.trim().strip_prefix("Error: ") {
+            error = Some(e.to_string());
+        }
+    }
+    if code != 0 {
+        bail!(error.unwrap_or_else(|| format!("the administrator step failed (exit code {code})")));
+    }
+    Ok(())
+}
+
+/// The elevated process started by `run_elevated`: `--install-sim <config dir> --companion <exe>` or
+/// `--uninstall-sim <config dir>`, with `--log <file>`. Returns the exit code.
+pub fn elevated_helper(args: &[String]) -> i32 {
+    let value = |flag: &str| args.iter().position(|a| a == flag).and_then(|i| args.get(i + 1)).map(PathBuf::from);
+    let mut r = Report(String::new());
+    let result = match (value("--install-sim"), value("--uninstall-sim"), value("--companion")) {
+        (Some(dir), _, Some(exe)) => install_sim(&dir, &exe, &mut r),
+        (None, Some(dir), _) => uninstall_sim(&dir, &mut r),
+        _ => Err(anyhow!("bad arguments")),
+    };
+    if let Err(e) = &result {
+        r.line(format!("  Error: {e:#}"));
+    }
+    if let Some(log) = value("--log") {
+        r.save_to(&log);
+    }
+    i32::from(result.is_err())
 }
 
 pub fn uninstall() -> Result<()> {
@@ -391,22 +511,17 @@ fn uninstall_steps(r: &mut Report) -> Result<()> {
     stop_running(&install_dir().join(EXE_NAME), r);
     let mut errors = Vec::new();
     for sim in find_sims() {
-        let xml = exe_xml_path(&sim.config_dir);
-        match edit_exe_xml(&xml, false, |t| {
-            remove_entries(t);
-            Ok(())
-        }) {
-            Ok(true) => r.line(format!("Removed auto-start from {}", xml.display())),
-            Ok(false) => {}
-            Err(e) => errors.push(format!("{}: {e:#}", xml.display())),
-        }
-        if let Some(target) = sim.community.map(|c| c.join(PACKAGE_NAME)) {
-            if target.exists() {
-                match fs::remove_dir_all(&target) {
-                    Ok(()) => r.line(format!("Removed {}", target.display())),
-                    Err(e) => errors.push(format!("{}: {e}", target.display())),
-                }
+        r.line(format!("MSFS 2024 ({}):", sim.label));
+        let mut result = uninstall_sim(&sim.config_dir, r);
+        if let Err(e) = &result {
+            if access_denied(e) && !win::is_elevated() {
+                r.line(format!("  {e:#}"));
+                r.line("  Access denied: retrying with administrator rights");
+                result = run_elevated(&["--uninstall-sim", &sim.config_dir.to_string_lossy()], r);
             }
+        }
+        if let Err(e) = result {
+            errors.push(format!("MSFS 2024 ({}): {e:#}", sim.label));
         }
     }
     if !errors.is_empty() {
